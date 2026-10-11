@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 does NOT auto-detect tailwind.config.js - it must be loaded
+ * explicitly. Without this line every custom theme utility (bg-background,
+ * bg-surface, bg-card, text-text, text-text-muted, border-border, text-primary,
+ * from-primary, ...) is silently dropped, so switching vibes only changes the
+ * label text and never paints the theme colors.
+ */
+@config "../tailwind.config.js";
+
+/* Class-based dark mode (mirrors darkMode: 'class' in tailwind.config.js).
+ * `.vaporwave` is also a dark palette, so Magic UI `dark:` styles apply there too. */
+@custom-variant dark (&:where(.dark, .vaporwave, .dark *, .vaporwave *));
+
+/* Magic UI animation utilities (Tailwind v4 theme tokens). */
+@theme {
+  --animate-shiny-text: shiny-text var(--shiny-duration, 5s) ease-in-out infinite;
+  --animate-gradient: gradient 8s linear infinite;
+  --animate-shine: shine var(--duration, 14s) linear infinite;
+  --animate-shimmer-slide: shimmer-slide var(--speed, 3s) ease-in-out infinite alternate;
+  --animate-spin-around: spin-around calc(var(--speed, 3s) * 2) infinite linear;
+
+  @keyframes shiny-text {
+    0%, 90%, 100% {
+      background-position: calc(-100% - var(--shiny-width, 100px)) 0;
+    }
+    30%, 60% {
+      background-position: calc(100% + var(--shiny-width, 100px)) 0;
+    }
+  }
+
+  @keyframes gradient {
+    to {
+      background-position: var(--bg-size, 300%) 0;
+    }
+  }
+
+  @keyframes shine {
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    to {
+      background-position: 0% 0%;
+    }
+  }
+
+  @keyframes shimmer-slide {
+    to {
+      transform: translate(calc(100cqw - 100%), 0);
+    }
+  }
+
+  @keyframes spin-around {
+    0% {
+      transform: translateZ(0) rotate(0);
+    }
+    15%, 35% {
+      transform: translateZ(0) rotate(90deg);
+    }
+    65%, 95% {
+      transform: translateZ(0) rotate(270deg);
+    }
+    100% {
+      transform: translateZ(0) rotate(360deg);
+    }
+  }
+}
+
+/* Stitch-inspired Design System - Production Slate Foundation */
+:root,
+.light {
+  --color-primary: 56 189 248;
+  --color-secondary: 34 211 238;
+  --color-accent: 249 115 22;
+  --color-background: 248 250 252;
+  --color-surface: 255 255 255;
+  --color-text: 15 23 42;
+  --color-text-muted: 100 116 139;
+  --color-card: 255 255 255;
+  --color-border: 226 232 240;
+  --color-success: 16 185 129;
+  --color-warning: 245 158 11;
+  --color-error: 239 68 68;
+}
+
+/* Dark - Deep Navy with Electric Accents */
+.dark {
+  --color-primary: 56 189 248;
+  --color-secondary: 34 211 238;
+  --color-accent: 249 115 22;
+  --color-background: 11 14 20;
+  --color-surface: 15 23 42;
+  --color-text: 248 250 252;
+  --color-text-muted: 148 163 184;
+  --color-card: 30 41 59;
+  --color-border: 51 65 85;
+  --color-success: 52 211 153;
+  --color-warning: 251 191 36;
+  --color-error: 248 113 113;
+}
+
+/* Vaporwave - Cyberpunk Aesthetic */
+.vaporwave {
+  --color-primary: 236 72 153;
+  --color-secondary: 168 85 247;
+  --color-accent: 34 211 238;
+  --color-background: 17 24 39;
+  --color-surface: 31 41 55;
+  --color-text: 245 208 254;
+  --color-text-muted: 192 132 252;
+  --color-card: 55 65 81;
+  --color-border: 124 58 237;
+  --color-success: 167 243 208;
+  --color-warning: 252 211 77;
+  --color-error: 251 113 133;
+}
+
+/* Forest - Natural Serenity */
+.forest {
+  --color-primary: 16 185 129;
+  --color-secondary: 5 150 105;
+  --color-accent: 217 119 6;
+  --color-background: 240 253 244;
+  --color-surface: 236 253 245;
+  --color-text: 6 78 59;
+  --color-text-muted: 5 150 105;
+  --color-card: 220 252 231;
+  --color-border: 134 239 172;
+  --color-success: 34 197 94;
+  --color-warning: 234 179 8;
+  --color-error: 220 38 38;
+}
+
+/* Stitch Design System Typography.
+ * Inter is loaded via Google Fonts in index.html (display=swap); the stack
+ * below keeps native fallbacks for offline / blocked-font scenarios. */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
+  font-optical-sizing: auto;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle texture overlay for depth */
+.texture-overlay {
+  position: relative;
+}
+
+.texture-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    );
+  pointer-events: none;
+  opacity: 0.4;
+}
