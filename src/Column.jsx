@@ -34,15 +34,18 @@ function Column({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+      data-column-id={columnId}
       className="relative flex flex-col rounded-xl border border-border bg-card shadow-lg transition-all duration-300 hover:shadow-xl"
     >
       <BorderBeam
-        size={64}
+        size={95}
         duration={9}
         delay={beamDelay}
         colorFrom={beamFrom}
         colorTo={beamTo}
-        borderWidth={1.5}
+        borderWidth={2.5}
+        particleCount={56}
+        particleSize={3}
       />
       {/* Column Header */}
       <div className="flex items-center justify-between border-b border-border bg-surface/50 px-4 py-3 backdrop-blur-sm">

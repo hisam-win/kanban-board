@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   closestCorners,
@@ -9,7 +10,11 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import Column from './Column.jsx'
+import TaskCard from './TaskCard.jsx'
+import ThrowableCard from './ThrowableCard.jsx'
+import ThrowGhost from './ThrowGhost.jsx'
 import { useVibeTheme } from './hooks/useVibeTheme.js'
+import { useDragPhysics } from './hooks/useDragPhysics.ts'
 import { AnimatedGradientText } from './components/ui/animated-gradient-text.jsx'
 import { AnimatedGridPattern } from './components/ui/animated-grid-pattern.jsx'
 import { AnimatedShinyText } from './components/ui/animated-shiny-text.jsx'
@@ -120,6 +125,9 @@ function loadStoredTasks() {
 function App() {
   const [columns] = useState(initialColumns)
   const [tasks, setTasks] = useState(loadStoredTasks)
+  const [activeId, setActiveId] = useState(null)
+  const [throwMode, setThrowMode] = useState(false)
+  const [throwGhost, setThrowGhost] = useState(null)
   const [showCelebration, setShowCelebration] = useState(false)
   const [celebrationGif, setCelebrationGif] = useState('')
   const celebrationTimeoutRef = useRef(null)
@@ -134,6 +142,35 @@ function App() {
     [],
   )
   const { currentVibe, cycleVibe } = useVibeTheme()
+  const {
+    style: dragPhysicsStyle,
+    speed: dragSpeed,
+    isFlying: overlayFlying,
+    onPointerDown: onPhysicsDown,
+    onPointerMove: onPhysicsMove,
+    onPointerUp: onPhysicsUp,
+  } = useDragPhysics({throwPower:23})
+  const activeTask = useMemo(
+    () => tasks.find((task) => task.id === activeId) ?? null,
+    [tasks, activeId],
+  )
+
+  // Feed native window pointer movement into the velocity-tilt physics
+  // while a dnd-kit drag is active. dnd-kit's events only give deltas,
+  // so global listeners give the hook the absolute clientX/clientY it needs.
+  useEffect(() => {
+    if (!activeId) return undefined
+    const handleWindowMove = (event) => onPhysicsMove(event)
+    const handleWindowUp = () => onPhysicsUp()
+    window.addEventListener('pointermove', handleWindowMove)
+    window.addEventListener('pointerup', handleWindowUp)
+    window.addEventListener('pointercancel', handleWindowUp)
+    return () => {
+      window.removeEventListener('pointermove', handleWindowMove)
+      window.removeEventListener('pointerup', handleWindowUp)
+      window.removeEventListener('pointercancel', handleWindowUp)
+    }
+  }, [activeId, onPhysicsMove, onPhysicsUp])
 
   // Save tasks to localStorage whenever they change.
   useEffect(() => {
@@ -235,8 +272,55 @@ function App() {
    * If the pointer is released outside any droppable (`over` is null) or
    * the ids are unknown, we return the previous state unchanged.
    */
+  function handleDragStart(event) {
+    const draggedId = String(event.active.id)
+    setActiveId(draggedId)
+    // Seed velocity tracking from the pointer that started the drag.
+    // dnd-kit only tells us deltas afterwards, so window listeners take over.
+    const activatorEvent = event.activatorEvent
+    if (
+      activatorEvent &&
+      typeof activatorEvent.clientX === 'number' &&
+      typeof activatorEvent.clientY === 'number'
+    ) {
+      onPhysicsDown(activatorEvent)
+    }
+  }
+
+  function handleDragCancel() {
+    setActiveId(null)
+    onPhysicsUp()
+  }
+
+  // In throw mode, release velocity + drop point decide the column:
+  // fast flicks fly the ghost overlay across the board and land in
+  // whatever column is under the flight path.
+  function handleThrowRelease({ task, velocity, dropClient }) {
+    if (!task) return
+    const speed = Math.hypot(velocity.x, velocity.y)
+    setThrowGhost({ task, velocity, dropClient, speed })
+  }
+
+  const handleThrowLand = useCallback(({ taskId, columnId }) => {
+    setThrowGhost(null)
+    if (!columnId) return
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, columnId } : t)),
+    )
+  }, [])
+
+  // Reset drag / ghost state whenever the mode toggles so stale
+  // dnd-kit or ghost state can't blank the board.
+  useEffect(() => {
+    setActiveId(null)
+    onPhysicsUp()
+    setThrowGhost(null)
+  }, [throwMode, onPhysicsUp])
+
   function handleDragEnd(event) {
     const { active, over } = event
+    setActiveId(null)
+    onPhysicsUp()
     if (!over) return
 
     const activeId = String(active.id)
@@ -346,13 +430,25 @@ function App() {
                 </BlurFade>
                 <BlurFade delay={2.2} inView={true} direction="right" offset={10}>
                   <AnimatedShinyText className="text-xs font-medium">
-                    Drag • Drop • Auto-save
+                    {throwMode ? 'Throw • Fling • Bounce' : 'Drag • Drop • Auto-save'}
                   </AnimatedShinyText>
                 </BlurFade>
               </div>
             </div>
  
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setThrowMode((v) => !v)}
+                title="Toggle throw mode: toss cards with momentum"
+                className={`rounded-lg px-3 py-2 text-sm font-semibold shadow transition-all active:scale-95 ${
+                  throwMode
+                    ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-lg'
+                    : 'bg-background/50 text-text-muted ring-1 ring-border hover:text-text'
+                }`}
+              >
+                {throwMode ? '🎯 Throw: ON' : '🃏 Throw: OFF'}
+              </button>
               <div className="hidden sm:flex items-center gap-2 rounded-lg bg-background/50 px-3 py-1.5 text-xs font-medium text-text-muted ring-1 ring-border">
                 <BlurFade
                   delay={0.5}
@@ -396,6 +492,7 @@ function App() {
                   </BlurFade>
                 </span>
               </ShimmerButton>
+           
             </div>
           </div>
         </div>
@@ -405,8 +502,48 @@ function App() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragCancel={handleDragCancel}
           onDragEnd={handleDragEnd}
         >
+        {throwMode ? (
+          /* FREE-THROW PLAYGROUND: Column must stay inside DndContext
+             because Column uses useDroppable + SortableContext. */
+          <div className="relative">
+          <div className="relative grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {columns.map((column, index) => (
+              <Column
+                key={column.id}
+                columnId={column.id}
+                title={column.title}
+                accent={column.accent}
+                beamFrom={column.beamFrom}
+                beamTo={column.beamTo}
+                beamDelay={index * 1.5}
+                tasks={[]}
+                onAddTask={handleAddTask}
+                onDeleteTask={handleDeleteTask}
+              />
+            ))}
+          </div>
+            {/* floating throwable cards live above the grid */}
+            <div className="pointer-events-none absolute inset-0">
+            {tasks.map((task, i) => (
+              <div
+                key={task.id}
+                className="pointer-events-auto absolute left-1/2 w-[280px] -translate-x-1/2"
+                style={{ top: `${120 + i * 36}px` }}
+              >
+              <ThrowableCard task={task} onRelease={handleThrowRelease}>
+                <TaskCard task={task} onDelete={() => handleDeleteTask(task.id)} />
+              </ThrowableCard>
+              </div>
+            ))}
+            </div>
+            <ThrowGhost ghost={throwGhost} onLand={handleThrowLand} />
+          </div>
+        ) : (
+          <>
           <div className="relative grid grid-cols-1 gap-6 lg:grid-cols-3">
             {columns.map((column, index) => (
               <Column
@@ -423,6 +560,32 @@ function App() {
               />
             ))}
           </div>
+          <DragOverlay dropAnimation={null}>
+            {activeTask ? (
+              <div
+                style={{
+                  ...dragPhysicsStyle,
+                  fontSize: `${Math.min(20, 14 + dragSpeed / 400)}px`,
+                  boxShadow:
+                    dragSpeed > 1200
+                      ? '0 24px 60px -12px rgba(239, 68, 68, 0.65)'
+                      : dragSpeed > 450
+                        ? '0 20px 40px -12px rgba(59, 130, 246, 0.55)'
+                        : '0 12px 24px -12px rgba(0,0,0,.35)',
+                }}
+                className="w-[280px] cursor-grabbing"
+              >
+                <TaskCard task={activeTask} onDelete={() => {}} />
+                {dragSpeed > 450 && (
+                  <div className="pointer-events-none mt-1 text-center text-[11px] font-bold text-primary">
+                    {overlayFlying ? '🚀 FLYING' : `⚡ ${Math.round(dragSpeed)} px/s — release to throw`}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </DragOverlay>
+          </>
+        )}
         </DndContext>
       </main>
     </div>

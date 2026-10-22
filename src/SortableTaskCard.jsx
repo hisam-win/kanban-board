@@ -16,6 +16,12 @@ function SortableTaskCard({ task, onDelete }) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    opacity: isDragging ? 0.35 : undefined,
+  }
+
+  const dragHandleProps = {
+    ...attributes,
+    ...listeners,
   }
 
   return (
@@ -39,7 +45,7 @@ function SortableTaskCard({ task, onDelete }) {
         ref={setNodeRef}
         style={style}
         onDelete={onDelete}
-        dragHandleProps={{ ...attributes, ...listeners }}
+        dragHandleProps={dragHandleProps}
       />
     </motion.div>
   )

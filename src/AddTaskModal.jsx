@@ -3,12 +3,31 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { BlurFade } from './components/ui/blur-fade.jsx'
 import { ShineBorder } from './components/ui/shine-border.jsx'
 import { ShimmerButton } from './components/ui/shimmer-button.jsx'
+import { useDragPhysics } from './hooks/useDragPhysics'
 
 function AddTaskModal({ columnTitle, onClose, onAdd }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [showTitleWarning, setShowTitleWarning] = useState(false)
   const titleInputRef = useRef(null)
+
+  // Draggable / throwable dialog via the shared physics hook.
+  // Modified for modal use:
+  //  - free: true so pointer movement actually translates the dialog
+  //    (default false = tilt-only, for kanban cards).
+  //  - baseScale 1 / flyScale 1.02 so the dialog doesn't "pop" like a card.
+  //  - cardW/cardH match the dialog (~448px wide) so viewport bounce
+  //    keeps the whole modal on screen when thrown.
+  const drag = useDragPhysics({
+    free: true,
+    baseScale: 1,
+    flyScale: 1.02,
+    cardW: 448,
+    cardH: 420,
+    throwThreshold: 450,
+    friction: 0.965,
+    bounce: 7.72,
+  })
 
   // Autofocus the title input only once when the modal opens. Keep this
   // separate from the keydown effect below: that effect re-runs on every
@@ -62,12 +81,39 @@ function AddTaskModal({ columnTitle, onClose, onAdd }) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose, onAdd, title, description])
 
+  const { isDragging: dragIsDragging, onPointerMove: dragMove, onPointerUp: dragUp } = drag
+
+  // Keep tracking the pointer even if it leaves the dialog (header-only
+  // drag handle + pointer capture can be flaky inside motion wrappers).
+  // The hook itself is pointer-capture based, this is a belt-and-braces
+  // fallback so fast drags don't get stuck in `isDragging`.
+  useEffect(() => {
+    if (!dragIsDragging) return
+    const handleMove = (event) =>
+      dragMove({ clientX: event.clientX, clientY: event.clientY })
+    const handleUp = () => dragUp()
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [dragIsDragging, dragMove, dragUp])
+
   function handleSubmit(event) {
     event.preventDefault()
     const trimmedTitle = title.trim()
     if (!trimmedTitle) return
     onAdd(trimmedTitle, description.trim())
     onClose()
+  }
+
+  function handleDragHandlePointerDown(event) {
+    // Don't hijack clicks on the close button inside the header.
+    if (event.target.closest('button')) return
+    drag.onPointerDown(event)
   }
 
   return (
@@ -90,6 +136,21 @@ function AddTaskModal({ columnTitle, onClose, onAdd }) {
         className="relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl ring-1 ring-border/50"
         onClick={(event) => event.stopPropagation()}
       >
+        {/* Drag-physics layer: separate plain div so framer-motion's own
+            transform on the parent doesn't fight the hook's translate/
+            rotate/scale. The header below is the drag handle. */}
+        <div
+          style={{
+            ...drag.style,
+            cursor: drag.isDragging ? 'grabbing' : undefined,
+            touchAction: 'none',
+          }}
+          onPointerMove={(event) =>
+            drag.onPointerMove({ clientX: event.clientX, clientY: event.clientY })
+          }
+          onPointerUp={drag.onPointerUp}
+          onPointerCancel={() => drag.onPointerUp()}
+        >
         <ShineBorder
           borderWidth={1.5}
           duration={10}
@@ -99,8 +160,13 @@ function AddTaskModal({ columnTitle, onClose, onAdd }) {
             'rgb(var(--color-accent))',
           ]}
         />
-        {/* Modal Header */}
-        <div className="border-b border-border bg-surface/50 px-6 py-4 backdrop-blur-sm">
+        {/* Modal Header — drag handle for the physics hook. Inputs in the
+            body stay fully usable because only the header starts a drag. */}
+        <div
+          className="cursor-grab border-b border-border bg-surface/50 px-6 py-4 backdrop-blur-sm active:cursor-grabbing"
+          style={{ touchAction: 'none' }}
+          onPointerDown={handleDragHandlePointerDown}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary">
@@ -231,6 +297,7 @@ function AddTaskModal({ columnTitle, onClose, onAdd }) {
             </div>
           </div>
         </form>
+        </div>
       </motion.div>
     </motion.div>
   )

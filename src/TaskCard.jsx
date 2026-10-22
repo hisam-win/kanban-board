@@ -1,25 +1,68 @@
-import { forwardRef } from 'react'
+import { forwardRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { BlurFade } from './components/ui/blur-fade.jsx'
 import { MagicCard } from './components/ui/magic-card.jsx'
+import { useDragPhysics } from './hooks/useDragPhysics.ts'
 
 const TaskCard = forwardRef(function TaskCard(
-  { task, onDelete, style, dragHandleProps },
-  ref,
+ { task, onDelete, style, dragHandleProps },
+ ref,
 ) {
-  const titleDirection = ['left', 'right', 'up', 'down'][task.id.charCodeAt(task.id.length - 1) % 4]
-  const descriptionDirection = ['up', 'down', 'left', 'right'][task.id.charCodeAt(0) % 4]
+ const {
+   style: physicsStyle,
+   isDragging: isPhysicsDragging,
+   onPointerDown: onPhysicsPointerDown,
+   onPointerMove: onPhysicsMove,
+   onPointerUp: onPhysicsUp,
+ } = useDragPhysics({ throwPower: 1.15 })
 
-  return (
-    <motion.li
-      ref={ref}
-      style={style}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
-      whileHover={{ y: -2, transition: { duration: 0.15 } }}
-      className="list-none"
-    >
+ useEffect(() => {
+   if (!isPhysicsDragging) return undefined
+
+   const handleMove = (event) => onPhysicsMove(event)
+   const handleUp = (event) => onPhysicsUp(event)
+
+   window.addEventListener('pointermove', handleMove)
+   window.addEventListener('pointerup', handleUp)
+   window.addEventListener('pointercancel', handleUp)
+
+   return () => {
+     window.removeEventListener('pointermove', handleMove)
+     window.removeEventListener('pointerup', handleUp)
+     window.removeEventListener('pointercancel', handleUp)
+   }
+ }, [isPhysicsDragging, onPhysicsMove, onPhysicsUp])
+
+ const mergedStyle = {
+   ...style,
+   ...physicsStyle,
+   transform: [style?.transform, physicsStyle?.transform]
+     .filter(Boolean)
+     .join(' '),
+ }
+
+ const titleDirection = ['left', 'right', 'up', 'down'][task.id.charCodeAt(task.id.length - 1) % 4]
+ const descriptionDirection = ['up', 'down', 'left', 'right'][task.id.charCodeAt(0) % 4]
+
+ const handlePointerDown = (event) => {
+   onPhysicsPointerDown(event)
+   dragHandleProps?.onPointerDown?.(event)
+ }
+
+ const handleDragProps = dragHandleProps
+   ? { ...dragHandleProps, onPointerDown: handlePointerDown }
+   : undefined
+
+ return (
+   <motion.li
+     ref={ref}
+     style={mergedStyle}
+     initial={{ opacity: 0, scale: 0.95 }}
+     animate={{ opacity: 1, scale: 1 }}
+     exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+     whileHover={{ y: -2, transition: { duration: 0.15 } }}
+     className={`list-none ${isPhysicsDragging ? 'cursor-grabbing' : ''}`}
+   >
       <MagicCard
         gradientSize={180}
         gradientColor="rgb(var(--color-primary) / 0.14)"
@@ -33,7 +76,7 @@ const TaskCard = forwardRef(function TaskCard(
 
       <div className="flex items-start gap-3 p-4 pl-5">
         <span
-          {...dragHandleProps}
+          {...handleDragProps}
           aria-label="Drag task"
           className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-1 text-text-muted transition-all hover:bg-surface hover:text-text active:cursor-grabbing"
         >
